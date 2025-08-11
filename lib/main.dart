@@ -1,4 +1,5 @@
-// // lib/main.dart
+//
+//
 // import 'package:flutter/material.dart';
 // import 'package:chess/chess.dart' as chess;
 //
@@ -27,7 +28,15 @@
 //   String? _selectedSquare;
 //   List<String> _legalMovesForSelected = [];
 //
-//   // Helper: translate chess.Piece -> a unicode symbol
+//   int _whiteCapturedCount = 0;
+//   int _blackCapturedCount = 0;
+//
+//   // NEW: Lists to store captured pieces
+//   final List<String> _whiteCapturedPieces = [];
+//   final List<String> _blackCapturedPieces = [];
+//
+//   String? _winner; // null until game ends
+//
 //   String _symbolFor(chess.Piece? p) {
 //     if (p == null) return '';
 //     final isWhite = p.color == chess.Color.WHITE;
@@ -58,7 +67,7 @@
 //       });
 //       return;
 //     }
-//     final turn = _game.turn; // 'w' or 'b'
+//     final turn = _game.turn;
 //     final isWhitePiece = piece.color == chess.Color.WHITE;
 //     if ((turn == 'w' && isWhitePiece) || (turn == 'b' && !isWhitePiece)) {
 //       setState(() {
@@ -69,7 +78,6 @@
 //             .toList();
 //       });
 //     } else {
-//       // not your piece: clear selection
 //       setState(() {
 //         _selectedSquare = null;
 //         _legalMovesForSelected = [];
@@ -78,8 +86,9 @@
 //   }
 //
 //   void _tryMove(String from, String to) {
-//     // check promotion (auto-queen)
 //     final movingPiece = _game.get(from);
+//     final targetPiece = _game.get(to); // for capture tracking
+//
 //     String? promotion;
 //     if (movingPiece != null && movingPiece.type == chess.PieceType.PAWN) {
 //       final toRank = int.parse(to[1]);
@@ -94,13 +103,32 @@
 //       'to': to,
 //       if (promotion != null) 'promotion': promotion,
 //     });
+//
 //     if (move != null) {
+//       // Track captures
+//       if (targetPiece != null) {
+//         final symbol = _symbolFor(targetPiece);
+//         if (movingPiece!.color == chess.Color.WHITE) {
+//           _whiteCapturedCount++;
+//           _whiteCapturedPieces.add(symbol);
+//         } else {
+//           _blackCapturedCount++;
+//           _blackCapturedPieces.add(symbol);
+//         }
+//       }
+//
+//       // Check for game end
+//       if (_game.in_checkmate) {
+//         _winner = _game.turn == 'w' ? 'Black' : 'White';
+//       } else if (_game.in_draw) {
+//         _winner = 'Draw';
+//       }
+//
 //       setState(() {
 //         _selectedSquare = null;
 //         _legalMovesForSelected = [];
 //       });
 //     } else {
-//       // illegal move (shouldn't happen if we validated before)
 //       setState(() {
 //         _selectedSquare = null;
 //         _legalMovesForSelected = [];
@@ -112,9 +140,8 @@
 //   }
 //
 //   Widget _buildSquare(int rankIndex, int fileIndex) {
-//     // rankIndex 0 is top (rank 8), fileIndex 0 is 'a'
-//     final rank = 8 - rankIndex; // 8..1
-//     final file = String.fromCharCode('a'.codeUnitAt(0) + fileIndex); // a..h
+//     final rank = 8 - rankIndex;
+//     final file = String.fromCharCode('a'.codeUnitAt(0) + fileIndex);
 //     final square = '$file$rank';
 //     final piece = _game.get(square);
 //     final isLight = (rankIndex + fileIndex) % 2 == 0;
@@ -123,7 +150,6 @@
 //
 //     final baseColor = isLight ? const Color(0xFFEEEED2) : const Color(0xFF769656);
 //
-//     // The piece widget is draggable if there's a piece on this square.
 //     final pieceWidget = piece != null
 //         ? Draggable<String>(
 //       data: square,
@@ -142,7 +168,6 @@
 //       ),
 //       childWhenDragging: const SizedBox.shrink(),
 //       onDragStarted: () {
-//         // show legal moves while dragging
 //         _selectSquare(square);
 //       },
 //       onDraggableCanceled: (_, __) {
@@ -163,7 +188,6 @@
 //     return DragTarget<String>(
 //       onWillAccept: (fromSquare) {
 //         if (fromSquare == null) return false;
-//         // Accept only if it's a legal move from 'fromSquare' to this 'square'
 //         final moves = _game.moves({'square': fromSquare, 'verbose': true});
 //         return moves.any((m) => m['to'] == square);
 //       },
@@ -173,14 +197,12 @@
 //       builder: (context, candidateData, rejectedData) {
 //         return GestureDetector(
 //           onTap: () {
-//             // Tap: select piece or move if a selected piece and this is legal
 //             if (_selectedSquare == null) {
 //               _selectSquare(square);
 //             } else {
 //               if (_legalMovesForSelected.contains(square)) {
 //                 _tryMove(_selectedSquare!, square);
 //               } else {
-//                 // maybe select a different piece
 //                 _selectSquare(square);
 //               }
 //             }
@@ -188,13 +210,13 @@
 //           child: Container(
 //             decoration: BoxDecoration(
 //               color: baseColor,
-//               border: isSelected ? Border.all(color: Colors.yellowAccent, width: 3) : null,
+//               border: isSelected
+//                   ? Border.all(color: Colors.yellowAccent, width: 3)
+//                   : null,
 //             ),
 //             child: Stack(
 //               children: [
-//                 // piece (draggable)
 //                 Positioned.fill(child: pieceWidget),
-//                 // legal move dot
 //                 if (isLegalMove)
 //                   const Positioned(
 //                     right: 6,
@@ -203,11 +225,13 @@
 //                       width: 18,
 //                       height: 18,
 //                       child: DecoratedBox(
-//                         decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
+//                         decoration: BoxDecoration(
+//                           shape: BoxShape.circle,
+//                           color: Colors.black26,
+//                         ),
 //                       ),
 //                     ),
 //                   ),
-//                 // highlight when drag is over this square (candidate)
 //                 if (candidateData.isNotEmpty)
 //                   Positioned.fill(
 //                     child: Container(
@@ -223,9 +247,10 @@
 //   }
 //
 //   String _turnText() {
-//     if (_game.in_checkmate) return 'Checkmate — ${_game.turn == 'w' ? 'Black' : 'White'} wins';
-//     if (_game.in_draw) return 'Draw';
-//     if (_game.in_check) return 'Check — ${_game.turn == 'w' ? 'White' : 'Black'} to move';
+//     if (_winner != null) return _winner == 'Draw' ? 'Draw' : 'Winner: $_winner';
+//     if (_game.in_check) {
+//       return 'Check — ${_game.turn == 'w' ? 'White' : 'Black'} to move';
+//     }
 //     return '${_game.turn == 'w' ? 'White' : 'Black'} to move';
 //   }
 //
@@ -243,6 +268,11 @@
 //                 _game.reset();
 //                 _selectedSquare = null;
 //                 _legalMovesForSelected = [];
+//                 _whiteCapturedCount = 0;
+//                 _blackCapturedCount = 0;
+//                 _whiteCapturedPieces.clear();
+//                 _blackCapturedPieces.clear();
+//                 _winner = null;
 //               });
 //             },
 //           ),
@@ -250,17 +280,17 @@
 //             tooltip: 'Undo',
 //             icon: const Icon(Icons.undo),
 //             onPressed: () {
-//               // chess package method name may vary; try common ones
 //               setState(() {
 //                 try {
-//                   _game.undo_move(); // older naming
+//                   _game.undo_move();
 //                 } catch (_) {
 //                   try {
-//                     _game.undo(); // some libs use undo()
+//                     _game.undo();
 //                   } catch (_) {
-//                     // If neither exists, simply reset (fallback)
 //                     ScaffoldMessenger.of(context).showSnackBar(
-//                       const SnackBar(content: Text('Undo not supported by chess lib version')),
+//                       const SnackBar(
+//                         content: Text('Undo not supported by chess lib version'),
+//                       ),
 //                     );
 //                   }
 //                 }
@@ -275,7 +305,28 @@
 //         children: [
 //           Padding(
 //             padding: const EdgeInsets.all(8.0),
-//             child: Text(_turnText(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+//             child: Text(
+//               _turnText(),
+//               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+//             ),
+//           ),
+//           // Captured pieces info
+//           Row(
+//             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+//             children: [
+//               Column(
+//                 children: [
+//                   Text('White captured ($_whiteCapturedCount): ${_whiteCapturedPieces.join(' ')}',
+//                       style: const TextStyle(fontSize: 14)),
+//                 ],
+//               ),
+//               Column(
+//                 children: [
+//                   Text('Black captured ($_blackCapturedCount): ${_blackCapturedPieces.join(' ')}',
+//                       style: const TextStyle(fontSize: 14)),
+//                 ],
+//               ),
+//             ],
 //           ),
 //           Expanded(
 //             flex: 6,
@@ -283,11 +334,12 @@
 //               aspectRatio: 1.0,
 //               child: GridView.builder(
 //                 physics: const NeverScrollableScrollPhysics(),
-//                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
+//                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+//                     crossAxisCount: 8),
 //                 itemCount: 64,
 //                 itemBuilder: (context, index) {
-//                   final rankIndex = index ~/ 8; // 0..7
-//                   final fileIndex = index % 8; // 0..7
+//                   final rankIndex = index ~/ 8;
+//                   final fileIndex = index % 8;
 //                   return _buildSquare(rankIndex, fileIndex);
 //                 },
 //               ),
@@ -320,7 +372,14 @@
 
 
 
-// lib/main.dart
+
+
+
+
+
+
+
+
 import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as chess;
 
@@ -352,7 +411,6 @@ class _ChessHomePageState extends State<ChessHomePage> {
   int _whiteCapturedCount = 0;
   int _blackCapturedCount = 0;
 
-  // NEW: Lists to store captured pieces
   final List<String> _whiteCapturedPieces = [];
   final List<String> _blackCapturedPieces = [];
 
@@ -380,6 +438,8 @@ class _ChessHomePageState extends State<ChessHomePage> {
   }
 
   void _selectSquare(String square) {
+    if (_winner != null) return; // Stop selecting after game ends
+
     final piece = _game.get(square);
     if (piece == null) {
       setState(() {
@@ -407,8 +467,10 @@ class _ChessHomePageState extends State<ChessHomePage> {
   }
 
   void _tryMove(String from, String to) {
+    if (_winner != null) return; // Stop moves if game is over
+
     final movingPiece = _game.get(from);
-    final targetPiece = _game.get(to); // for capture tracking
+    final targetPiece = _game.get(to);
 
     String? promotion;
     if (movingPiece != null && movingPiece.type == chess.PieceType.PAWN) {
@@ -438,11 +500,15 @@ class _ChessHomePageState extends State<ChessHomePage> {
         }
       }
 
-      // Check for game end
+      // Winner/Draw detection
       if (_game.in_checkmate) {
         _winner = _game.turn == 'w' ? 'Black' : 'White';
+      } else if (_game.in_stalemate) {
+        _winner = 'Draw (Stalemate)';
       } else if (_game.in_draw) {
         _winner = 'Draw';
+      } else if (_game.insufficient_material) {
+        _winner = 'Draw (Insufficient Material)';
       }
 
       setState(() {
@@ -568,11 +634,26 @@ class _ChessHomePageState extends State<ChessHomePage> {
   }
 
   String _turnText() {
-    if (_winner != null) return _winner == 'Draw' ? 'Draw' : 'Winner: $_winner';
+    if (_winner != null) {
+      return _winner!.startsWith('Draw') ? _winner! : 'Winner: $_winner';
+    }
     if (_game.in_check) {
       return 'Check — ${_game.turn == 'w' ? 'White' : 'Black'} to move';
     }
     return '${_game.turn == 'w' ? 'White' : 'Black'} to move';
+  }
+
+  void _resetGame() {
+    setState(() {
+      _game.reset();
+      _selectedSquare = null;
+      _legalMovesForSelected = [];
+      _whiteCapturedCount = 0;
+      _blackCapturedCount = 0;
+      _whiteCapturedPieces.clear();
+      _blackCapturedPieces.clear();
+      _winner = null;
+    });
   }
 
   @override
@@ -584,23 +665,13 @@ class _ChessHomePageState extends State<ChessHomePage> {
           IconButton(
             tooltip: 'Reset',
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _game.reset();
-                _selectedSquare = null;
-                _legalMovesForSelected = [];
-                _whiteCapturedCount = 0;
-                _blackCapturedCount = 0;
-                _whiteCapturedPieces.clear();
-                _blackCapturedPieces.clear();
-                _winner = null;
-              });
-            },
+            onPressed: _resetGame,
           ),
           IconButton(
             tooltip: 'Undo',
             icon: const Icon(Icons.undo),
             onPressed: () {
+              if (_winner != null) return;
               setState(() {
                 try {
                   _game.undo_move();
@@ -631,22 +702,18 @@ class _ChessHomePageState extends State<ChessHomePage> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
-          // Captured pieces info
+          if (_winner != null)
+            ElevatedButton(
+              onPressed: _resetGame,
+              child: const Text("Play Again"),
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              Column(
-                children: [
-                  Text('White captured ($_whiteCapturedCount): ${_whiteCapturedPieces.join(' ')}',
-                      style: const TextStyle(fontSize: 14)),
-                ],
-              ),
-              Column(
-                children: [
-                  Text('Black captured ($_blackCapturedCount): ${_blackCapturedPieces.join(' ')}',
-                      style: const TextStyle(fontSize: 14)),
-                ],
-              ),
+              Text('White captured ($_whiteCapturedCount): ${_whiteCapturedPieces.join(' ')}',
+                  style: const TextStyle(fontSize: 14)),
+              Text('Black captured ($_blackCapturedCount): ${_blackCapturedPieces.join(' ')}',
+                  style: const TextStyle(fontSize: 14)),
             ],
           ),
           Expanded(
@@ -682,3 +749,13 @@ class _ChessHomePageState extends State<ChessHomePage> {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
